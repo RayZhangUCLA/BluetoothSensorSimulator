@@ -64,6 +64,8 @@
             <file
                 path="C:\Users\ray\AndroidStudioProjects\BluetoothSensorSimulator\app\src\main\res\values\strings.xml"
                 qualifiers="" >
+                <string name="title_activity_bluetooth_connection" >BluetoothConnection
+                </string>
                 <string name="action_settings" >Settings
                 </string>
                 <string name="Text" >Status: None
@@ -95,6 +97,16 @@
                 path="C:\Users\ray\AndroidStudioProjects\BluetoothSensorSimulator\app\src\main\res\layout\listviewargument.xml"
                 qualifiers=""
                 type="layout" />
+            <file
+                name="activity_bluetooth_connection"
+                path="C:\Users\ray\AndroidStudioProjects\BluetoothSensorSimulator\app\src\main\res\layout\activity_bluetooth_connection.xml"
+                qualifiers=""
+                type="layout" />
+            <file
+                name="bluetooth_connection"
+                path="C:\Users\ray\AndroidStudioProjects\BluetoothSensorSimulator\app\src\main\res\menu\bluetooth_connection.xml"
+                qualifiers=""
+                type="menu" />
         </source>
         <source path="C:\Users\ray\AndroidStudioProjects\BluetoothSensorSimulator\app\build\generated\res\rs\debug" />
         <source path="C:\Users\ray\AndroidStudioProjects\BluetoothSensorSimulator\app\build\generated\res\generated\debug" />

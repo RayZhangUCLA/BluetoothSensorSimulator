@@ -1,5 +1,6 @@
 package com.example.ray.bluetoothsensorsimulator;
 
+import android.app.ActionBar;
 import android.app.Activity;
 import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothDevice;
@@ -7,11 +8,13 @@ import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.graphics.drawable.ColorDrawable;
 import android.os.Bundle;
 import android.util.Log;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.view.View;
+import android.widget.AdapterView;
 import android.widget.ArrayAdapter;
 import android.widget.Button;
 import android.widget.ListView;
@@ -40,12 +43,13 @@ public class MainActivity extends Activity {
     private BluetoothAdapter myBTAdapter;
     private Set<BluetoothDevice> pairedDevices;
     private ArrayAdapter<String> BTArrayAdapter;
-
+    public final static String EXTRA_MESSAGE = "com.example.ray.bluetoothsensorsimulator.MESSAGE";
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
+        Log.v("MainActivity", "onCreate");
 
         //Setting Up Bluetooth
         myBTAdapter = BluetoothAdapter.getDefaultAdapter();
@@ -106,15 +110,34 @@ public class MainActivity extends Activity {
         Scan.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
+                Log.v("Button", "Scan button clicked");
+                if(myBTAdapter.isDiscovering()) {
+                    myBTAdapter.cancelDiscovery();
+                }
                 BTArrayAdapter.clear();
                 registerReceiver(myReceiver, new IntentFilter(BluetoothDevice.ACTION_FOUND));
                 myBTAdapter.startDiscovery();
             }
         });
 
+        //Set up Listview
         listView = (ListView) findViewById(R.id.main_listview);
         BTArrayAdapter = new ArrayAdapter<String>(this, R.layout.listviewargument);
         listView.setAdapter(this.BTArrayAdapter);
+
+        listView.setOnItemClickListener(new AdapterView.OnItemClickListener() {
+            @Override
+            public void onItemClick(AdapterView<?> adapterView, View viewClicked, int i, long l) {
+                TextView textClicked = (TextView) viewClicked;
+                String message = textClicked.getText().toString();
+                Toast.makeText(MainActivity.this, "You choose Device " + message.replace(System.getProperty("line.separator")," ") + ".", Toast.LENGTH_LONG).show();
+
+                //Start BluetoothConnection Activity
+                Intent intent = new Intent(MainActivity.this, BluetoothConnection.class);
+                intent.putExtra(EXTRA_MESSAGE, message);
+                startActivity(intent);
+            }
+        });
     }
 
 
@@ -129,6 +152,7 @@ public class MainActivity extends Activity {
                 BluetoothDevice device = intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE);
                 //Add the name and address to an array adapter to show in the listview
                 BTArrayAdapter.add(device.getName() + "\n" + device.getAddress());
+                BTArrayAdapter.notifyDataSetChanged();
             }
         }
     };
@@ -166,10 +190,10 @@ public class MainActivity extends Activity {
 
     @Override
     protected void onPause() {
+        Log.v("MainActivity", "onPause");
         try {
             unregisterReceiver(myReceiver);
         }catch(IllegalArgumentException e){
-            e.printStackTrace();
             Log.v("MainActivity", "try to unregister unregistered broadcast receiver");
         }
         super.onPause();

@@ -25,6 +25,14 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+        <activity
+            android:name="com.example.ray.bluetoothsensorsimulator.BluetoothConnection"
+            android:label="@string/title_activity_bluetooth_connection"
+            android:parentActivityName="com.example.ray.bluetoothsensorsimulator.MainActivity" >
+            <meta-data
+                android:name="android.support.PARENT_ACTIVITY"
+                android:value="com.example.ray.bluetoothsensorsimulator.MainActivity" />
+        </activity>
     </application>
 
 </manifest>
