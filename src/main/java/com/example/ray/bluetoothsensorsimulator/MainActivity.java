@@ -32,6 +32,7 @@ import java.util.Set;
 
     References: http://examples.javacodegeeks.com/android/core/bluetooth/bluetoothadapter/android-bluetooth-example/
                 http://developer.android.com/guide/topics/connectivity/bluetooth.html#SettingUp
+                https://github.com/hzjerry/BluetoothSppPro/tree/68d025eab4cedae05b969892427f6a46f4021b5a
  */
 
 public class MainActivity extends Activity {
