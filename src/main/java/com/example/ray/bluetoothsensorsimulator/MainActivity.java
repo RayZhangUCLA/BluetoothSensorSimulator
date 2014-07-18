@@ -27,7 +27,7 @@ import java.util.Set;
 
 
 /*
-    This app is intended to simulate a Bluetooth Sensor that uses SPP profile
+    This app is intended to simulate a Bluetooth Light Sensor that uses SPP profile
     to send data to an Embedded Linux Device(eg. BeagleBone Black) on an Android phone.
 
     References: http://examples.javacodegeeks.com/android/core/bluetooth/bluetoothadapter/android-bluetooth-example/
@@ -194,10 +194,12 @@ public class MainActivity extends Activity {
     @Override
     protected void onPause() {
         Log.v("MainActivity", "onPause");
-        try {
-            unregisterReceiver(myReceiver);
-        }catch(IllegalArgumentException e){
-            Log.v("MainActivity", "try to unregister unregistered broadcast receiver");
+        if(myReceiver != null){
+            try {
+                unregisterReceiver(myReceiver);
+            }catch(IllegalArgumentException e){
+                Log.v("MainActivity", "try to unregister unregistered broadcast receiver");
+            }
         }
         super.onPause();
     }

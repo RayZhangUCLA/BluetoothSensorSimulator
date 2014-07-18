@@ -5,7 +5,12 @@ import android.app.ProgressDialog;
 import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothDevice;
 import android.bluetooth.BluetoothSocket;
+import android.content.Context;
 import android.content.Intent;
+import android.hardware.Sensor;
+import android.hardware.SensorEvent;
+import android.hardware.SensorEventListener;
+import android.hardware.SensorManager;
 import android.os.AsyncTask;
 import android.os.Bundle;
 import android.util.Log;
@@ -16,18 +21,25 @@ import android.widget.Button;
 import android.widget.TextView;
 import android.widget.Toast;
 
-import com.example.ray.bluetoothsensorsimulator.R;
-
 import java.io.IOException;
-import java.io.InputStream;
 import java.io.OutputStream;
+import java.text.DateFormat;
+import java.text.SimpleDateFormat;
+import java.util.Calendar;
+import java.util.Date;
+import java.util.Locale;
+import java.util.TimeZone;
 import java.util.UUID;
 
-public class BluetoothConnection extends Activity {
+public class BluetoothConnection extends Activity implements SensorEventListener{
 
     public static boolean connectionExists = false;
     public static BluetoothSocket BTsocket;
-    private DataSendingTask SendData = new DataSendingTask(); //must execute after BTConnTask is executed first
+    public static OutputStream BTConnOutput;
+    private DataSendingTask SendData; //must execute after BTConnTask is executed first
+    private SensorManager mySensorManager;
+    private Sensor mySensor;
+    private boolean sensor_registered = false;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -41,9 +53,37 @@ public class BluetoothConnection extends Activity {
 
         //Set device info
         BluetoothDevice chosen_device = BluetoothAdapter.getDefaultAdapter().getRemoteDevice(Name_and_Mac[1]);
-        String text = "Name: " + Name_and_Mac[0] +"\n"+ "Mac: " + Name_and_Mac[1]  + "\n" + "Class: " + chosen_device.getBluetoothClass().toString();
+        String text = "Name: " + Name_and_Mac[0] +"\n"
+                    + "Mac: " + Name_and_Mac[1]  + "\n"
+                    + "Class: " + chosen_device.getBluetoothClass().toString() + "\n"
+                    + "Sensor Type: Light";
         TextView DeviceText = (TextView) findViewById(R.id.DeviceName);
         DeviceText.setText(text);
+
+        //Set Sensor Reading
+        final TextView sensor_reading = (TextView) findViewById(R.id.SensorText);
+        sensor_reading.setVisibility(View.GONE);
+
+
+        //Set send button
+        final Button sendButton = (Button) findViewById(R.id.send_button);
+        sendButton.setVisibility(View.GONE);
+        sendButton.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                Toast.makeText(BluetoothConnection.this, "Sending data...", Toast.LENGTH_LONG).show();
+
+                try {
+                    BTConnOutput = BTsocket.getOutputStream();
+                } catch (IOException e) {
+                    e.printStackTrace();
+                    Log.v("BTConnActivity", "Fail to obtain input/output stream");
+                }
+
+                sensor_registered = true;
+                mySensorManager.registerListener(BluetoothConnection.this, mySensor, SensorManager.SENSOR_DELAY_NORMAL);
+            }
+        });
 
         //Set connect button
         Button connButton = (Button) findViewById(R.id.Connect_button);
@@ -52,26 +92,13 @@ public class BluetoothConnection extends Activity {
             public void onClick(View view) {
                 BTConnTask BTConnection = new BTConnTask();
                 BTConnection.execute(Name_and_Mac[1]);
+                sendButton.setVisibility(View.VISIBLE);
+                sensor_reading.setVisibility(View.VISIBLE);
             }
         });
 
-        //Set send button
-        Button sendButton = (Button) findViewById(R.id.send_button);
-        sendButton.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View view) {
-                SendData.execute();
-            }
-        });
-
-        //Set cancel button
-        Button cancelButton = (Button) findViewById(R.id.cancel_button);
-        cancelButton.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View view) {
-                 SendData.cancel(true);
-            }
-        });
+        mySensorManager = (SensorManager) getSystemService(Context.SENSOR_SERVICE);
+        mySensor = mySensorManager.getDefaultSensor(Sensor.TYPE_LIGHT);
 
     }
 
@@ -95,30 +122,76 @@ public class BluetoothConnection extends Activity {
         return super.onOptionsItemSelected(item);
     }
 
+    @Override
+    public void onSensorChanged(SensorEvent sensorEvent) {
+        //Every time sensor changes, it will send data to Embedded devices through Bluetooth
+        System.out.println(sensorEvent.timestamp);
+
+        TextView sensorText = (TextView) findViewById(R.id.SensorText);
+
+        //Get sensor info
+        String sensorName = mySensor.getName();
+        String sensorValue =  Float.toString(sensorEvent.values[0]);
+        String sensorAccuracy = Integer.toString(sensorEvent.accuracy);
+
+        //Get time
+        Calendar c = Calendar.getInstance();
+        SimpleDateFormat sdf = new SimpleDateFormat("dd:MMMM:yyyy HH:mm:ss a");
+        String sensorTime = sdf.format(c.getTime());
+
+        String display_message = "Sensor reading: " + sensorValue + " lx";
+        String send_message = "Name: " + sensorName + "   "
+                            + "Time: " + sensorTime + "   "
+                            + "Accuracy: " + sensorAccuracy + "   "
+                            + "Value: " + sensorValue + "\n";
+
+        sensorText.setText(display_message);
+
+        DataSendingTask newDataTask = new DataSendingTask();
+        SendData = newDataTask;
+        newDataTask.execute(send_message);
+    }
 
     @Override
-    protected void onPause() {
-        super.onPause();
-
-        try {
-            BluetoothConnection.BTsocket.close();
-            BluetoothConnection.connectionExists = false;
-        } catch (IOException e) {
-            e.printStackTrace();
-            Log.v("BTConnActivity", "Failed to close bt connection in onPause");
-        }
+    public void onAccuracyChanged(Sensor sensor, int i) {
+        //Do nothing if accuracy changed
     }
 
     @Override
     protected void onStop() {
+        Log.v("BTConnActivity", "onStop");
         super.onStop();
-        SendData.cancel(true);
-    }
+        //Cancel data sending task
+        if(SendData != null && !SendData.isCancelled())
+            SendData.cancel(true);
 
-    @Override
-    protected void onDestroy() {
-        super.onDestroy();
-        SendData.cancel(true);
+        //Unregister sensor event
+        if(sensor_registered)
+        {
+            sensor_registered = false;
+            mySensorManager.unregisterListener(BluetoothConnection.this, mySensor);
+        }
+
+        //Close outputstream
+        if(BTConnOutput != null){
+            try {
+                BTConnOutput.close();
+            } catch (IOException e) {
+                e.printStackTrace();
+                Log.v("DataSendingTask", "Cannot close outputstream");
+            }
+        }
+
+        //Close Bluetooth Connection task
+        if(BluetoothConnection.connectionExists){
+            try {
+                BluetoothConnection.BTsocket.close();
+                BluetoothConnection.connectionExists = false;
+            } catch (IOException e) {
+                e.printStackTrace();
+                Log.v("BTConnActivity", "Failed to close bt connection in onPause");
+            }
+        }
     }
 
     //Use AsyncTask to connect to Other devices via SPP
@@ -169,7 +242,7 @@ public class BluetoothConnection extends Activity {
                     BluetoothConnection.BTsocket.close();
                 } catch (IOException e1) {
                     e1.printStackTrace();
-                    Log.v("BTConnActivity", "Unable to close bluetooth socket");
+                    Log.v("BTConnTask", "Unable to close bluetooth socket");
                 }
                 Log.v("BTConnActivity", "Fail to get Bluetooth Socket from remote devices");
                 BluetoothConnection.connectionExists = false;
@@ -192,91 +265,35 @@ public class BluetoothConnection extends Activity {
     }
 
 
-    private class DataSendingTask extends AsyncTask<Void, Void, Integer>{
+    private class DataSendingTask extends AsyncTask<String, Void, Integer>{
 
-        private OutputStream out = null;
         private final Integer task_succeed = 1;
         private final Integer task_failed = 2;
         private final Integer task_cancelled = 3;
 
         @Override
-        protected void onPreExecute() {
-            super.onPreExecute();
-
-            Toast.makeText(BluetoothConnection.this, "Sending data...", Toast.LENGTH_LONG).show();
-            try {
-                this.out = BluetoothConnection.BTsocket.getOutputStream();
-            } catch (IOException e) {
-                e.printStackTrace();
-                Log.v("BTConnActivity", "Fail to obtain input/output stream");
-            }
-        }
-
-        @Override
-        protected Integer doInBackground(Void... Voids) {
-            if(out == null || BluetoothConnection.BTsocket == null){
-                Log.v("BTConnActivity", "Outputstream or BTsocket is empty");
+        protected Integer doInBackground(String... params) {
+            if(BTConnOutput == null || BluetoothConnection.BTsocket == null){
+                Log.v("DatasendingTask", "Outputstream or BTsocket is empty");
                 return task_failed;
             }
 
-            for(int i=0; i<5; i++){
-                //check if task is cancelled
-                if(isCancelled()){
-                    Log.v("BTConnActivity", "Task cancelled");
-                    return task_cancelled;
-                }
+            //check if task is cancelled
+            if (isCancelled()) {
+                Log.v("DataSendingTask", "Task cancelled");
+                return task_cancelled;
+            }
 
-                if(!isCancelled())
-                    System.out.println("Not cancelled");
-                else
-                    System.out.println("Cancelled");
-
-                //write to devices
-                try {
-                    out.write(new String("Greetings from ray's Android phone\n").getBytes());
-                    Thread.sleep(2000);
-                } catch (IOException e) {
-                    e.printStackTrace();
-                    Log.v("BTConnActivity", "Failed to write to outputStream");
-                    return task_failed;
-                } catch (InterruptedException e) {
-                    e.printStackTrace();
-                    Log.v("BTConnActivity", "Cannot sleep");
-                    return task_failed;
-                }
+            //write to devices
+            try {
+                BTConnOutput.write(params[0].getBytes());
+            } catch (IOException e) {
+                e.printStackTrace();
+                Log.v("BTConnActivity", "Failed to write to outputStream");
+                return task_failed;
             }
 
             return task_succeed;
-        }
-
-        @Override
-        protected void onCancelled(Integer result) {
-            super.onCancelled(result);
-            Log.v("BTConnActivity", "onCancelled");
-            Toast.makeText(BluetoothConnection.this, "Send cancelled", Toast.LENGTH_LONG).show();
-        }
-
-        @Override
-        protected void onPostExecute(Integer result) {
-            super.onPostExecute(result);
-            Log.v("BTConnActivity", "onPostExecute");
-            System.out.println(result);
-
-            try {
-                out.close();
-            } catch (IOException e) {
-                e.printStackTrace();
-                Log.v("BTConnActivity", "Cannot close outputstream");
-            }
-
-            switch (result){
-                case 1: // Execution successful
-                    Toast.makeText(BluetoothConnection.this, "Send successfully", Toast.LENGTH_LONG).show();
-                    break;
-                case 2: // Execution failed
-                    Toast.makeText(BluetoothConnection.this, "Send failed", Toast.LENGTH_LONG).show();
-            }
-
         }
     }
 }
