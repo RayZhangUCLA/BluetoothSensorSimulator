@@ -22,13 +22,15 @@ public final class R {
         public static final int Connect_button=0x7f080001;
         public static final int DeviceInfo=0x7f080000;
         public static final int DeviceName=0x7f080002;
-        public static final int Paird_button=0x7f080006;
-        public static final int Scan_button=0x7f080007;
-        public static final int Status=0x7f080004;
-        public static final int Switch_button=0x7f080005;
-        public static final int action_settings=0x7f080009;
-        public static final int linearLayout=0x7f080003;
-        public static final int main_listview=0x7f080008;
+        public static final int Paird_button=0x7f080008;
+        public static final int Scan_button=0x7f080009;
+        public static final int Status=0x7f080006;
+        public static final int Switch_button=0x7f080007;
+        public static final int action_settings=0x7f08000b;
+        public static final int cancel_button=0x7f080004;
+        public static final int linearLayout=0x7f080005;
+        public static final int main_listview=0x7f08000a;
+        public static final int send_button=0x7f080003;
     }
     public static final class layout {
         public static final int activity_bluetooth_connection=0x7f030000;

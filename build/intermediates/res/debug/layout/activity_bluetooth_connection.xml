@@ -36,6 +36,22 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content" />
 
+    <Button
+        android:id="@+id/send_button"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="  Send  "
+        android:layout_gravity="center"
+        android:layout_marginTop="120dp"
+        />
+
+    <Button
+        android:id="@+id/cancel_button"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Cancel"
+        android:layout_gravity="center"
+        />
 
 </LinearLayout>
 <!-- From: file:/C:/Users/ray/AndroidStudioProjects/BluetoothSensorSimulator/app/src/main/res/layout/activity_bluetooth_connection.xml -->

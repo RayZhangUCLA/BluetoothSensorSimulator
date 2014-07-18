@@ -71,6 +71,8 @@ public class MainActivity extends Activity {
         }
 
         status = (TextView) findViewById(R.id.Status);
+        if(myBTAdapter.isEnabled())
+            status.setText("Status: Enabled");
 
         BTswitch = (Button) findViewById(R.id.Switch_button);
         //Turn on/off the bluetooth module

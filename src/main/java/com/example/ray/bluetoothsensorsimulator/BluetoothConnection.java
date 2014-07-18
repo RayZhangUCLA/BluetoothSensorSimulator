@@ -19,12 +19,15 @@ import android.widget.Toast;
 import com.example.ray.bluetoothsensorsimulator.R;
 
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.util.UUID;
 
 public class BluetoothConnection extends Activity {
 
     public static boolean connectionExists = false;
     public static BluetoothSocket BTsocket;
+    private DataSendingTask SendData = new DataSendingTask(); //must execute after BTConnTask is executed first
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -37,7 +40,8 @@ public class BluetoothConnection extends Activity {
         final String Name_and_Mac[] = DeviceName_And_MAC.split("\\r?\\n");
 
         //Set device info
-        String text = "Name: " + Name_and_Mac[0] +"\n"+ "Mac: " + Name_and_Mac[1];
+        BluetoothDevice chosen_device = BluetoothAdapter.getDefaultAdapter().getRemoteDevice(Name_and_Mac[1]);
+        String text = "Name: " + Name_and_Mac[0] +"\n"+ "Mac: " + Name_and_Mac[1]  + "\n" + "Class: " + chosen_device.getBluetoothClass().toString();
         TextView DeviceText = (TextView) findViewById(R.id.DeviceName);
         DeviceText.setText(text);
 
@@ -50,6 +54,25 @@ public class BluetoothConnection extends Activity {
                 BTConnection.execute(Name_and_Mac[1]);
             }
         });
+
+        //Set send button
+        Button sendButton = (Button) findViewById(R.id.send_button);
+        sendButton.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                SendData.execute();
+            }
+        });
+
+        //Set cancel button
+        Button cancelButton = (Button) findViewById(R.id.cancel_button);
+        cancelButton.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                 SendData.cancel(true);
+            }
+        });
+
     }
 
 
@@ -84,6 +107,18 @@ public class BluetoothConnection extends Activity {
             e.printStackTrace();
             Log.v("BTConnActivity", "Failed to close bt connection in onPause");
         }
+    }
+
+    @Override
+    protected void onStop() {
+        super.onStop();
+        SendData.cancel(true);
+    }
+
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+        SendData.cancel(true);
     }
 
     //Use AsyncTask to connect to Other devices via SPP
@@ -156,5 +191,93 @@ public class BluetoothConnection extends Activity {
         }
     }
 
+
+    private class DataSendingTask extends AsyncTask<Void, Void, Integer>{
+
+        private OutputStream out = null;
+        private final Integer task_succeed = 1;
+        private final Integer task_failed = 2;
+        private final Integer task_cancelled = 3;
+
+        @Override
+        protected void onPreExecute() {
+            super.onPreExecute();
+
+            Toast.makeText(BluetoothConnection.this, "Sending data...", Toast.LENGTH_LONG).show();
+            try {
+                this.out = BluetoothConnection.BTsocket.getOutputStream();
+            } catch (IOException e) {
+                e.printStackTrace();
+                Log.v("BTConnActivity", "Fail to obtain input/output stream");
+            }
+        }
+
+        @Override
+        protected Integer doInBackground(Void... Voids) {
+            if(out == null || BluetoothConnection.BTsocket == null){
+                Log.v("BTConnActivity", "Outputstream or BTsocket is empty");
+                return task_failed;
+            }
+
+            for(int i=0; i<5; i++){
+                //check if task is cancelled
+                if(isCancelled()){
+                    Log.v("BTConnActivity", "Task cancelled");
+                    return task_cancelled;
+                }
+
+                if(!isCancelled())
+                    System.out.println("Not cancelled");
+                else
+                    System.out.println("Cancelled");
+
+                //write to devices
+                try {
+                    out.write(new String("Greetings from ray's Android phone\n").getBytes());
+                    Thread.sleep(2000);
+                } catch (IOException e) {
+                    e.printStackTrace();
+                    Log.v("BTConnActivity", "Failed to write to outputStream");
+                    return task_failed;
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                    Log.v("BTConnActivity", "Cannot sleep");
+                    return task_failed;
+                }
+            }
+
+            return task_succeed;
+        }
+
+        @Override
+        protected void onCancelled(Integer result) {
+            super.onCancelled(result);
+            Log.v("BTConnActivity", "onCancelled");
+            Toast.makeText(BluetoothConnection.this, "Send cancelled", Toast.LENGTH_LONG).show();
+        }
+
+        @Override
+        protected void onPostExecute(Integer result) {
+            super.onPostExecute(result);
+            Log.v("BTConnActivity", "onPostExecute");
+            System.out.println(result);
+
+            try {
+                out.close();
+            } catch (IOException e) {
+                e.printStackTrace();
+                Log.v("BTConnActivity", "Cannot close outputstream");
+            }
+
+            switch (result){
+                case 1: // Execution successful
+                    Toast.makeText(BluetoothConnection.this, "Send successfully", Toast.LENGTH_LONG).show();
+                    break;
+                case 2: // Execution failed
+                    Toast.makeText(BluetoothConnection.this, "Send failed", Toast.LENGTH_LONG).show();
+            }
+
+        }
+    }
 }
 
