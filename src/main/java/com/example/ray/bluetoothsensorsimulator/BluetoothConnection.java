@@ -12,6 +12,7 @@ import android.hardware.SensorEvent;
 import android.hardware.SensorEventListener;
 import android.hardware.SensorManager;
 import android.os.AsyncTask;
+import android.os.Build;
 import android.os.Bundle;
 import android.util.Log;
 import android.view.Menu;
@@ -90,16 +91,22 @@ public class BluetoothConnection extends Activity implements SensorEventListener
         connButton.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
-                BTConnTask BTConnection = new BTConnTask();
-                BTConnection.execute(Name_and_Mac[1]);
-                sendButton.setVisibility(View.VISIBLE);
-                sensor_reading.setVisibility(View.VISIBLE);
-            }
+                if(mySensor != null){
+                    BTConnTask BTConnection = new BTConnTask();
+                    BTConnection.execute(Name_and_Mac[1]);
+                    sendButton.setVisibility(View.VISIBLE);
+                    sensor_reading.setVisibility(View.VISIBLE);
+                }else {
+                    Toast.makeText(BluetoothConnection.this, "Cannot connect, you do not have light sensors on your phone.", Toast.LENGTH_LONG).show();
+                }
+                }
         });
 
         mySensorManager = (SensorManager) getSystemService(Context.SENSOR_SERVICE);
         mySensor = mySensorManager.getDefaultSensor(Sensor.TYPE_LIGHT);
 
+        if(mySensor == null)
+            Toast.makeText(BluetoothConnection.this, "Sorry, you do not have light sensors on your phone.", Toast.LENGTH_LONG).show();
     }
 
 
@@ -140,7 +147,8 @@ public class BluetoothConnection extends Activity implements SensorEventListener
         String sensorTime = sdf.format(c.getTime());
 
         String display_message = "Sensor reading: " + sensorValue + " lx";
-        String send_message = "Name: " + sensorName + "   "
+        String send_message = "Phone name :" + Build.DEVICE + "   "
+                            + "Sensor Name: " + sensorName + "   "
                             + "Time: " + sensorTime + "   "
                             + "Accuracy: " + sensorAccuracy + "   "
                             + "Value: " + sensorValue + "\n";
@@ -229,6 +237,7 @@ public class BluetoothConnection extends Activity implements SensorEventListener
 
             try {
                 //Step 2:
+                //tempSocket = remoteDevice.createInsecureRfcommSocketToServiceRecord(UUID.randomUUID());
                 tempSocket = remoteDevice.createInsecureRfcommSocketToServiceRecord(UUID.fromString("00001101-0000-1000-8000-00805F9B34FB"));
                 BluetoothConnection.BTsocket = tempSocket;
 

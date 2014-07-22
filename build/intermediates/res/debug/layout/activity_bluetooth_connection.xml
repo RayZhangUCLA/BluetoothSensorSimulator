@@ -47,7 +47,7 @@
 
     <TextView
         android:id="@+id/SensorText"
-        android:text="Sensor Not Available"
+        android:text="Sensor Reading Not Available"
         android:layout_gravity="center"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
