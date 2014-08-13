@@ -14,6 +14,7 @@ import android.hardware.SensorManager;
 import android.os.AsyncTask;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.SystemClock;
 import android.util.Log;
 import android.view.Menu;
 import android.view.MenuItem;
@@ -24,6 +25,7 @@ import android.widget.Toast;
 
 import java.io.IOException;
 import java.io.OutputStream;
+import java.sql.Timestamp;
 import java.text.DateFormat;
 import java.text.SimpleDateFormat;
 import java.util.Calendar;
@@ -41,6 +43,8 @@ public class BluetoothConnection extends Activity implements SensorEventListener
     private SensorManager mySensorManager;
     private Sensor mySensor;
     private boolean sensor_registered = false;
+    private time_and_reading[] reading_array = new time_and_reading[10];
+    private int num_readings = 0;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -74,13 +78,6 @@ public class BluetoothConnection extends Activity implements SensorEventListener
             public void onClick(View view) {
                 Toast.makeText(BluetoothConnection.this, "Sending data...", Toast.LENGTH_LONG).show();
 
-                try {
-                    BTConnOutput = BTsocket.getOutputStream();
-                } catch (IOException e) {
-                    e.printStackTrace();
-                    Log.v("BTConnActivity", "Fail to obtain input/output stream");
-                }
-
                 sensor_registered = true;
                 mySensorManager.registerListener(BluetoothConnection.this, mySensor, SensorManager.SENSOR_DELAY_NORMAL);
             }
@@ -92,10 +89,36 @@ public class BluetoothConnection extends Activity implements SensorEventListener
             @Override
             public void onClick(View view) {
                 if(mySensor != null){
+                    //Establish bluetooth connection
                     BTConnTask BTConnection = new BTConnTask();
                     BTConnection.execute(Name_and_Mac[1]);
                     sendButton.setVisibility(View.VISIBLE);
                     sensor_reading.setVisibility(View.VISIBLE);
+
+                    System.out.println("Connection established");
+
+                    SystemClock.sleep(2000);
+
+                    //Obtain BT connection Ouputstream
+                    try {
+                        BTConnOutput = BTsocket.getOutputStream();
+                    } catch (IOException e) {
+                        e.printStackTrace();
+                        Log.v("BTConnActivity", "Fail to obtain input/output stream");
+                    }
+
+                    //Sending Metadata to Device
+                    String sensorName = mySensor.getName();
+                    String send_message = "sensor name: " + String.format("%-10s", Build.DEVICE) + " "
+                            + "sensor type: " + String.format("%-25s", sensorName) + " "
+                            + "sensor unit: lx\n";
+
+                    System.out.println(send_message);
+
+                    DataSendingTask newDataTask = new DataSendingTask();
+                    SendData = newDataTask;
+                    newDataTask.execute(send_message);
+
                 }else {
                     Toast.makeText(BluetoothConnection.this, "Cannot connect, you do not have light sensors on your phone.", Toast.LENGTH_LONG).show();
                 }
@@ -131,34 +154,50 @@ public class BluetoothConnection extends Activity implements SensorEventListener
 
     @Override
     public void onSensorChanged(SensorEvent sensorEvent) {
-        //Every time sensor changes, it will send data to Embedded devices through Bluetooth
+        //It will send data to Embedded devices through Bluetooth when having 10 readings
         System.out.println(sensorEvent.timestamp);
 
         TextView sensorText = (TextView) findViewById(R.id.SensorText);
 
         //Get sensor info
-        String sensorName = mySensor.getName();
-        String sensorValue =  Float.toString(sensorEvent.values[0]);
-        String sensorAccuracy = Integer.toString(sensorEvent.accuracy);
+        Float sensorValue =  sensorEvent.values[0];
 
         //Get time
-        Calendar c = Calendar.getInstance();
-        SimpleDateFormat sdf = new SimpleDateFormat("dd:MMMM:yyyy HH:mm:ss a");
-        String sensorTime = sdf.format(c.getTime());
+        Date date = new Date();
+        long time = date.getTime();
+        Timestamp ts = new Timestamp(time);
 
         String display_message = "Sensor reading: " + sensorValue + " lx";
-        String send_message = "Phone name :" + Build.DEVICE + "   "
-                            + "Sensor Name: " + sensorName + "   "
-                            + "Time: " + sensorTime + "   "
-                            + "Accuracy: " + sensorAccuracy + "   "
-                            + "Value: " + sensorValue + "\n";
+        String send_message = null;
 
+        System.out.println("Getting readings");
+
+        // Only send data when we have 10 readings
+        if(num_readings < 10){
+            reading_array[num_readings]= new time_and_reading();
+            reading_array[num_readings].ts = ts;
+            reading_array[num_readings].reading = Float.toString(sensorValue);
+            num_readings++;
+        }
+        else{
+            send_message = "Data: [";
+            for(int i=0; i<num_readings; i++){
+                send_message += reading_array[i].ts.toString() + "  " + reading_array[i].reading + ",";
+            }
+            send_message += "]\n";
+
+            //Clear data
+            num_readings = 0;
+            reading_array = new time_and_reading[10];
+
+            DataSendingTask newDataTask = new DataSendingTask();
+            SendData = newDataTask;
+            newDataTask.execute(send_message);
+        }
+
+        System.out.println("Reading obtained");
         sensorText.setText(display_message);
-
-        DataSendingTask newDataTask = new DataSendingTask();
-        SendData = newDataTask;
-        newDataTask.execute(send_message);
-    }
+ }
 
     @Override
     public void onAccuracyChanged(Sensor sensor, int i) {
@@ -304,6 +343,11 @@ public class BluetoothConnection extends Activity implements SensorEventListener
 
             return task_succeed;
         }
+    }
+
+    private class time_and_reading{
+        Timestamp ts;
+        String reading;
     }
 }
 
