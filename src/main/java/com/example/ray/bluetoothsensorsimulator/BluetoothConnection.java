@@ -36,6 +36,25 @@ import java.util.Locale;
 import java.util.TimeZone;
 import java.util.UUID;
 
+//Packets for Bluetooth Connection:
+//       	Data_packet:
+//         	 _____________________________________
+//        	|_STX_|_TYPE_|_F/D_|_NOR_|_DATA_|_ETX_|	 (Length: 15 - 1027 bytes)
+//
+//       	Info_packet:
+//        	 ________________________________
+//        	|_STX_|_TYPE_|_LEN_|_SINFO_|_ETX_| (length: 4 - ???)
+//
+//        	STX: Start of text denote the start of message. It's ASCII character 0x02. (1 byte)
+//        	TYPE: Indicate whether this packet is data packet or metada packet. '1' for data, '0' for metadata (1 bit)
+//        	F/D: Float or double. '0' for float and '1' for double (1 bit)
+//        	NOR: Number of readings in data section. Maximum number is 64 (6 bits)
+//        	DATA: (Timestamp, reading) pairs. Timestamp is unix timestamp, and reading is expressed in float or double.
+//        		Number of pairs are specified in NOR field (12 or 16 bytes per tuple)
+//        	LEN: Length of strings in sinfo filed
+//        	SINFO: ASCII strings of sensor name, type, and unit seperated by '\t'
+//        	ETX: End of text. It's ASCII character 0x03 (1 byte)
+
 public class BluetoothConnection extends Activity implements SensorEventListener{
 
     public static boolean connectionExists = false;
@@ -45,7 +64,8 @@ public class BluetoothConnection extends Activity implements SensorEventListener
     private SensorManager mySensorManager;
     private Sensor mySensor;
     private boolean sensor_registered = false;
-    private time_and_reading[] reading_array = new time_and_reading[10];
+    private int NOR = 27;
+    private time_and_reading[] reading_array = new time_and_reading[this.NOR];
     private int num_readings = 0;
     private short type_mask_info = 0x7FFF;
     private byte type_mask_data = (byte) 0x80;
@@ -127,7 +147,6 @@ public class BluetoothConnection extends Activity implements SensorEventListener
                         System.out.println("Constructing metadata...");
 
                         short temp = (short) (len & type_mask_info);
-                        System.out.println(temp);
                         byte[] type_len = new byte[2];
                         type_len[0] = (byte) (temp & 0xFF);
                         type_len[1] = (byte) ((temp >> 8) & 0xFF);
@@ -140,6 +159,7 @@ public class BluetoothConnection extends Activity implements SensorEventListener
                         System.arraycopy(sinfo.getBytes(), 0, data_send, 3, temp); //copy SINFO
                         data_send[1+2+temp] = (byte) 0x03; //copy ETX
 
+                        System.out.println(bytesToHex(data_send));
 
                         DataSendingTask newDataTask = new DataSendingTask();
                         SendData = newDataTask;
@@ -184,9 +204,7 @@ public class BluetoothConnection extends Activity implements SensorEventListener
 
     @Override
     public void onSensorChanged(SensorEvent sensorEvent) {
-        //It will send data to Embedded devices through Bluetooth when having 10 readings
-        System.out.println(sensorEvent.timestamp);
-
+        //It will send data to Embedded devices through Bluetooth when having this.NOR readings
         TextView sensorText = (TextView) findViewById(R.id.SensorText);
 
         //Get sensor info
@@ -198,10 +216,10 @@ public class BluetoothConnection extends Activity implements SensorEventListener
         System.out.print(timestamp);
 
         String display_message = "Sensor reading: " + sensorValue + " lx";
-        System.out.println("Getting readings");
+        System.out.println("\nGetting readings");
 
-        // Only send data when we have 10 readings
-        if(num_readings < 10){
+        // Only send data when we have NOR readings
+        if(this.num_readings < this.NOR){
             reading_array[num_readings]= new time_and_reading();
             reading_array[num_readings].ts = timestamp;
             reading_array[num_readings].reading = sensorValue;
@@ -209,10 +227,10 @@ public class BluetoothConnection extends Activity implements SensorEventListener
         }
         else{
             //Constructing data packet
-            byte[] data_send = new byte[1+1+10*12+1];
+            byte[] data_send = new byte[1+1+this.NOR*12+1];
 
             data_send[0] = (byte) 0x02; //STX
-            data_send[1] = (byte )( (0x0A | type_mask_data) & float_mask); //1 for data, 0 for float, A for NOR
+            data_send[1] = (byte )( (this.NOR | type_mask_data) & float_mask); //1 for data, 0 for float, A for NOR
 
             int reading_index = 2;
             for(int i=0; i<num_readings; i++){
@@ -228,18 +246,19 @@ public class BluetoothConnection extends Activity implements SensorEventListener
                 reading_index += 12;
             }
 
-            data_send[1+1+10*12] = (byte) 0x03;
+            data_send[1+1+this.NOR*12] = (byte) 0x03;
+            System.out.println(bytesToHex(data_send));
+
 
             //Clear data
             num_readings = 0;
-            reading_array = new time_and_reading[10];
+            reading_array = new time_and_reading[this.NOR];
 
             DataSendingTask newDataTask = new DataSendingTask();
             SendData = newDataTask;
             newDataTask.execute(data_send);
             }
 
-        System.out.println("Reading obtained");
         sensorText.setText(display_message);
     }
 
@@ -320,7 +339,6 @@ public class BluetoothConnection extends Activity implements SensorEventListener
 
             try {
                 //Step 2:
-                //tempSocket = remoteDevice.createInsecureRfcommSocketToServiceRecord(UUID.randomUUID());
                 tempSocket = remoteDevice.createInsecureRfcommSocketToServiceRecord(UUID.fromString("00001101-0000-1000-8000-00805F9B34FB"));
                 BluetoothConnection.BTsocket = tempSocket;
 
@@ -393,4 +411,16 @@ public class BluetoothConnection extends Activity implements SensorEventListener
         long ts;
         float reading;
     }
+
+    final protected static char[] hexArray = "0123456789ABCDEF".toCharArray();
+    public static String bytesToHex(byte[] bytes) {
+        char[] hexChars = new char[bytes.length * 2];
+        for ( int j = 0; j < bytes.length; j++ ) {
+            int v = bytes[j] & 0xFF;
+            hexChars[j * 2] = hexArray[v >>> 4];
+            hexChars[j * 2 + 1] = hexArray[v & 0x0F];
+        }
+        return new String(hexChars);
+    }
+
 }
