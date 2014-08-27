@@ -25,6 +25,8 @@ import android.widget.Toast;
 
 import java.io.IOException;
 import java.io.OutputStream;
+import java.math.BigInteger;
+import java.nio.ByteBuffer;
 import java.sql.Timestamp;
 import java.text.DateFormat;
 import java.text.SimpleDateFormat;
@@ -45,6 +47,10 @@ public class BluetoothConnection extends Activity implements SensorEventListener
     private boolean sensor_registered = false;
     private time_and_reading[] reading_array = new time_and_reading[10];
     private int num_readings = 0;
+    private short type_mask_info = 0x7FFF;
+    private byte type_mask_data = (byte) 0x80;
+    private byte float_mask = (byte) 0xBF;
+    private byte double_mask = (byte) 0x40;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -59,9 +65,9 @@ public class BluetoothConnection extends Activity implements SensorEventListener
         //Set device info
         BluetoothDevice chosen_device = BluetoothAdapter.getDefaultAdapter().getRemoteDevice(Name_and_Mac[1]);
         String text = "Name: " + Name_and_Mac[0] +"\n"
-                    + "Mac: " + Name_and_Mac[1]  + "\n"
-                    + "Class: " + chosen_device.getBluetoothClass().toString() + "\n"
-                    + "Sensor Type: Light";
+                + "Mac: " + Name_and_Mac[1]  + "\n"
+                + "Class: " + chosen_device.getBluetoothClass().toString() + "\n"
+                + "Sensor Type: Light";
         TextView DeviceText = (TextView) findViewById(R.id.DeviceName);
         DeviceText.setText(text);
 
@@ -109,20 +115,44 @@ public class BluetoothConnection extends Activity implements SensorEventListener
 
                     //Sending Metadata to Device
                     String sensorName = mySensor.getName();
-                    String send_message = "sensor name: " + String.format("%-10s", Build.DEVICE) + " "
-                            + "sensor type: " + String.format("%-25s", sensorName) + " "
-                            + "sensor unit: lx\n";
+                    String sinfo = Build.DEVICE + "\t"
+                            + sensorName + "\t"
+                            + "lx";
+                    System.out.println(String.format("%040x", new BigInteger(1, sinfo.getBytes())));
+                    short len = (short) sinfo.length();
+                    System.out.println(len);
 
-                    System.out.println(send_message);
+                    if(len <= 32768) {
+                        //Constructing Sensor info packet
+                        System.out.println("Constructing metadata...");
 
-                    DataSendingTask newDataTask = new DataSendingTask();
-                    SendData = newDataTask;
-                    newDataTask.execute(send_message);
+                        short temp = (short) (len & type_mask_info);
+                        System.out.println(temp);
+                        byte[] type_len = new byte[2];
+                        type_len[0] = (byte) (temp & 0xFF);
+                        type_len[1] = (byte) ((temp >> 8) & 0xFF);
+
+                        byte[] data_send = new byte[1 + 2 + temp + 1];
+
+                        data_send[0] = (byte) 0x02; //copy STX
+                        data_send[1] = type_len[1]; //copy TYPE and LEN
+                        data_send[2] = type_len[0];
+                        System.arraycopy(sinfo.getBytes(), 0, data_send, 3, temp); //copy SINFO
+                        data_send[1+2+temp] = (byte) 0x03; //copy ETX
+
+
+                        DataSendingTask newDataTask = new DataSendingTask();
+                        SendData = newDataTask;
+                        newDataTask.execute(data_send);
+                    }
+                    else {
+                        Toast.makeText(BluetoothConnection.this, "Cannot send sensor information. Information is too big", Toast.LENGTH_LONG).show();
+                    }
 
                 }else {
                     Toast.makeText(BluetoothConnection.this, "Cannot connect, you do not have light sensors on your phone.", Toast.LENGTH_LONG).show();
                 }
-                }
+            }
         });
 
         mySensorManager = (SensorManager) getSystemService(Context.SENSOR_SERVICE);
@@ -160,31 +190,45 @@ public class BluetoothConnection extends Activity implements SensorEventListener
         TextView sensorText = (TextView) findViewById(R.id.SensorText);
 
         //Get sensor info
-        Float sensorValue =  sensorEvent.values[0];
+        float sensorValue =  sensorEvent.values[0];
 
         //Get time
-        Date date = new Date();
-        long time = date.getTime();
-        Timestamp ts = new Timestamp(time);
+        long timestamp = System.currentTimeMillis()/1000;
+        System.out.print("timestamp = ");
+        System.out.print(timestamp);
 
         String display_message = "Sensor reading: " + sensorValue + " lx";
-        String send_message = null;
-
         System.out.println("Getting readings");
 
         // Only send data when we have 10 readings
         if(num_readings < 10){
             reading_array[num_readings]= new time_and_reading();
-            reading_array[num_readings].ts = ts;
-            reading_array[num_readings].reading = Float.toString(sensorValue);
+            reading_array[num_readings].ts = timestamp;
+            reading_array[num_readings].reading = sensorValue;
             num_readings++;
         }
         else{
-            send_message = "Data: [";
+            //Constructing data packet
+            byte[] data_send = new byte[1+1+10*12+1];
+
+            data_send[0] = (byte) 0x02; //STX
+            data_send[1] = (byte )( (0x0A | type_mask_data) & float_mask); //1 for data, 0 for float, A for NOR
+
+            int reading_index = 2;
             for(int i=0; i<num_readings; i++){
-                send_message += reading_array[i].ts.toString() + "  " + reading_array[i].reading + ",";
+                //construct (ts, reading) tuple in byte array
+                byte[] ts_array = ByteBuffer.allocate(8).putLong(reading_array[i].ts).array();
+                byte[] rd_array = ByteBuffer.allocate(4).putFloat(reading_array[i].reading).array();
+                byte[] tuple_array = new byte[12];
+                System.arraycopy(ts_array, 0, tuple_array, 0, 8);
+                System.arraycopy(rd_array, 0, tuple_array, 8, 4);
+
+                //copy to data send
+                System.arraycopy(tuple_array, 0, data_send, reading_index, 12);
+                reading_index += 12;
             }
-            send_message += "]\n";
+
+            data_send[1+1+10*12] = (byte) 0x03;
 
             //Clear data
             num_readings = 0;
@@ -192,12 +236,12 @@ public class BluetoothConnection extends Activity implements SensorEventListener
 
             DataSendingTask newDataTask = new DataSendingTask();
             SendData = newDataTask;
-            newDataTask.execute(send_message);
-        }
+            newDataTask.execute(data_send);
+            }
 
         System.out.println("Reading obtained");
         sensorText.setText(display_message);
- }
+    }
 
     @Override
     public void onAccuracyChanged(Sensor sensor, int i) {
@@ -271,7 +315,7 @@ public class BluetoothConnection extends Activity implements SensorEventListener
             if(!localBTApt.isEnabled() || BluetoothConnection.connectionExists)
                 return false;
 
-                //Step 1:
+            //Step 1:
             final BluetoothDevice remoteDevice = BluetoothAdapter.getDefaultAdapter().getRemoteDevice(MACaddr[0]);
 
             try {
@@ -313,14 +357,14 @@ public class BluetoothConnection extends Activity implements SensorEventListener
     }
 
 
-    private class DataSendingTask extends AsyncTask<String, Void, Integer>{
+    private class DataSendingTask extends AsyncTask<byte[], Void, Integer>{
 
         private final Integer task_succeed = 1;
         private final Integer task_failed = 2;
         private final Integer task_cancelled = 3;
 
         @Override
-        protected Integer doInBackground(String... params) {
+        protected Integer doInBackground(byte[]... params) {
             if(BTConnOutput == null || BluetoothConnection.BTsocket == null){
                 Log.v("DatasendingTask", "Outputstream or BTsocket is empty");
                 return task_failed;
@@ -334,7 +378,7 @@ public class BluetoothConnection extends Activity implements SensorEventListener
 
             //write to devices
             try {
-                BTConnOutput.write(params[0].getBytes());
+                BTConnOutput.write(params[0]);
             } catch (IOException e) {
                 e.printStackTrace();
                 Log.v("BTConnActivity", "Failed to write to outputStream");
@@ -346,8 +390,7 @@ public class BluetoothConnection extends Activity implements SensorEventListener
     }
 
     private class time_and_reading{
-        Timestamp ts;
-        String reading;
+        long ts;
+        float reading;
     }
 }
-
