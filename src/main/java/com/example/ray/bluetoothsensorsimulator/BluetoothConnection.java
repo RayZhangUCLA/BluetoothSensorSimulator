@@ -41,18 +41,12 @@ import java.util.UUID;
 //         	 _____________________________________
 //        	|_STX_|_TYPE_|_F/D_|_NOR_|_DATA_|_ETX_|	 (Length: 15 - 1027 bytes)
 //
-//       	Info_packet:
-//        	 ________________________________
-//        	|_STX_|_TYPE_|_LEN_|_SINFO_|_ETX_| (length: 4 - ???)
-//
 //        	STX: Start of text denote the start of message. It's ASCII character 0x02. (1 byte)
 //        	TYPE: Indicate whether this packet is data packet or metada packet. '1' for data, '0' for metadata (1 bit)
 //        	F/D: Float or double. '0' for float and '1' for double (1 bit)
-//        	NOR: Number of readings in data section. Maximum number is 64 (6 bits)
+//        	NOR: Number of readings in data section. Maximum number is 63 (6 bits)
 //        	DATA: (Timestamp, reading) pairs. Timestamp is unix timestamp, and reading is expressed in float or double.
 //        		Number of pairs are specified in NOR field (12 or 16 bytes per tuple)
-//        	LEN: Length of strings in sinfo filed
-//        	SINFO: ASCII strings of sensor name, type, and unit seperated by '\t'
 //        	ETX: End of text. It's ASCII character 0x03 (1 byte)
 
 public class BluetoothConnection extends Activity implements SensorEventListener{
@@ -64,7 +58,7 @@ public class BluetoothConnection extends Activity implements SensorEventListener
     private SensorManager mySensorManager;
     private Sensor mySensor;
     private boolean sensor_registered = false;
-    private int NOR = 27;
+    private int NOR = 20;
     private time_and_reading[] reading_array = new time_and_reading[this.NOR];
     private int num_readings = 0;
     private short type_mask_info = 0x7FFF;
@@ -104,6 +98,14 @@ public class BluetoothConnection extends Activity implements SensorEventListener
             public void onClick(View view) {
                 Toast.makeText(BluetoothConnection.this, "Sending data...", Toast.LENGTH_LONG).show();
 
+                //Obtain BT connection Ouputstream
+                try {
+                    BTConnOutput = BTsocket.getOutputStream();
+                } catch (IOException e) {
+                    e.printStackTrace();
+                    Log.v("BTConnActivity", "Fail to obtain input/output stream");
+                }
+
                 sensor_registered = true;
                 mySensorManager.registerListener(BluetoothConnection.this, mySensor, SensorManager.SENSOR_DELAY_NORMAL);
             }
@@ -122,53 +124,6 @@ public class BluetoothConnection extends Activity implements SensorEventListener
                     sensor_reading.setVisibility(View.VISIBLE);
 
                     System.out.println("Connection established");
-
-                    SystemClock.sleep(2000);
-
-                    //Obtain BT connection Ouputstream
-                    try {
-                        BTConnOutput = BTsocket.getOutputStream();
-                    } catch (IOException e) {
-                        e.printStackTrace();
-                        Log.v("BTConnActivity", "Fail to obtain input/output stream");
-                    }
-
-                    //Sending Metadata to Device
-                    String sensorName = mySensor.getName();
-                    String sinfo = Build.DEVICE + "\t"
-                            + sensorName + "\t"
-                            + "lx";
-                    System.out.println(String.format("%040x", new BigInteger(1, sinfo.getBytes())));
-                    short len = (short) sinfo.length();
-                    System.out.println(len);
-
-                    if(len <= 32768) {
-                        //Constructing Sensor info packet
-                        System.out.println("Constructing metadata...");
-
-                        short temp = (short) (len & type_mask_info);
-                        byte[] type_len = new byte[2];
-                        type_len[0] = (byte) (temp & 0xFF);
-                        type_len[1] = (byte) ((temp >> 8) & 0xFF);
-
-                        byte[] data_send = new byte[1 + 2 + temp + 1];
-
-                        data_send[0] = (byte) 0x02; //copy STX
-                        data_send[1] = type_len[1]; //copy TYPE and LEN
-                        data_send[2] = type_len[0];
-                        System.arraycopy(sinfo.getBytes(), 0, data_send, 3, temp); //copy SINFO
-                        data_send[1+2+temp] = (byte) 0x03; //copy ETX
-
-                        System.out.println(bytesToHex(data_send));
-
-                        DataSendingTask newDataTask = new DataSendingTask();
-                        SendData = newDataTask;
-                        newDataTask.execute(data_send);
-                    }
-                    else {
-                        Toast.makeText(BluetoothConnection.this, "Cannot send sensor information. Information is too big", Toast.LENGTH_LONG).show();
-                    }
-
                 }else {
                     Toast.makeText(BluetoothConnection.this, "Cannot connect, you do not have light sensors on your phone.", Toast.LENGTH_LONG).show();
                 }
